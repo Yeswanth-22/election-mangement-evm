@@ -1,9 +1,22 @@
-import { useContext, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
-import Navbar from "../components/Navbar";
-import Sidebar from "../components/Sidebar";
 
-const initialForm = {
+import AnalystSidebar from "./components/AnalystSidebar";
+import AnalystTopbar from "./components/AnalystTopbar";
+import SummaryCard from "./components/SummaryCard";
+
+import VotesPerCandidateChart from "./components/charts/VotesPerCandidateChart";
+import ParticipationPieChart from "./components/charts/ParticipationPieChart";
+import VotingTrendLineChart from "./components/charts/VotingTrendLineChart";
+import RegionResultsChart from "./components/charts/RegionResultsChart";
+
+import electionData from "./data/electionData.json";
+import "./AnalystDashboard.css";
+
+const formatNumber = (value) => Number(value).toLocaleString();
+
+const reportInitialForm = {
   id: null,
   title: "",
   summary: "",
@@ -11,462 +24,323 @@ const initialForm = {
   status: "draft",
 };
 
-const reportFlow = {
-  draft: "review",
-  review: "published",
-  published: "published",
-};
-
-const buildPercent = (value, total) => {
-  if (!total) {
-    return 0;
-  }
-
-  return Math.round((value / total) * 100);
-};
-
-const normalizeLocation = (value) => {
-  if (!value || typeof value !== "string") {
-    return "Unknown";
-  }
-
-  const safeValue = value.trim();
-  return safeValue || "Unknown";
-};
-
 function AnalystDashboard() {
   const {
     currentUser,
-    incidents,
-    fraudReports,
+    logout,
     analystReports,
     createAnalystReport,
     updateAnalystReport,
     deleteAnalystReport,
   } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [now, setNow] = useState(() => new Date());
+  const [reportForm, setReportForm] = useState(reportInitialForm);
+  const [reportMessage, setReportMessage] = useState("");
+  const [candidateSearch, setCandidateSearch] = useState("");
 
-  const [activeSection, setActiveSection] = useState("overview");
-  const [form, setForm] = useState(initialForm);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [message, setMessage] = useState("");
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const notifications = useMemo(
+    () => electionData.recentActivity.filter((item) => item.status === "Pending").length,
+    []
+  );
+
+  const summaryCards = [
+    {
+      title: "Total Registered Voters",
+      value: formatNumber(electionData.summary.totalRegisteredVoters),
+      icon: "👥",
+      gradient: "gradient-1",
+    },
+    {
+      title: "Total Votes Cast",
+      value: formatNumber(electionData.summary.totalVotesCast),
+      icon: "🗳️",
+      gradient: "gradient-2",
+    },
+    {
+      title: "Voter Participation",
+      value: `${electionData.summary.participationPercentage}%`,
+      icon: "📈",
+      gradient: "gradient-3",
+    },
+    {
+      title: "Leading Candidate",
+      value: electionData.summary.leadingCandidate,
+      icon: "🏆",
+      gradient: "gradient-4",
+    },
+  ];
+
+  const constituencyRows = useMemo(
+    () =>
+      electionData.regionResults.map((item) => ({
+        ...item,
+        share: ((item.votes / electionData.summary.totalVotesCast) * 100).toFixed(2),
+      })),
+    []
+  );
+
+  const candidateRows = useMemo(() => {
+    const safeSearch = candidateSearch.trim().toLowerCase();
+
+    return [...electionData.votesPerCandidate]
+      .filter((item) => item.name.toLowerCase().includes(safeSearch))
+      .sort((first, second) => second.votes - first.votes)
+      .map((item, index) => ({
+        ...item,
+        rank: index + 1,
+      }));
+  }, [candidateSearch]);
 
   const myReports = useMemo(
-    () => analystReports.filter((report) => report.createdById === currentUser?.id),
+    () =>
+      analystReports
+        .filter((item) => item.createdById === currentUser?.id)
+        .sort(
+          (first, second) =>
+            new Date(second.updatedAt || second.createdAt || 0).getTime() -
+            new Date(first.updatedAt || first.createdAt || 0).getTime()
+        ),
     [analystReports, currentUser?.id]
   );
 
-  const incidentSeverity = useMemo(
-    () =>
-      incidents.reduce(
-        (accumulator, item) => {
-          const safeSeverity = item.severity || "medium";
-          if (accumulator[safeSeverity] === undefined) {
-            return accumulator;
-          }
-
-          return {
-            ...accumulator,
-            [safeSeverity]: accumulator[safeSeverity] + 1,
-          };
-        },
-        { low: 0, medium: 0, high: 0 }
-      ),
-    [incidents]
-  );
-
-  const fraudWorkflow = useMemo(
-    () =>
-      fraudReports.reduce(
-        (accumulator, item) => {
-          const safeStatus = item.status || "submitted";
-          if (accumulator[safeStatus] === undefined) {
-            return accumulator;
-          }
-
-          return {
-            ...accumulator,
-            [safeStatus]: accumulator[safeStatus] + 1,
-          };
-        },
-        { submitted: 0, "under-review": 0, verified: 0, rejected: 0 }
-      ),
-    [fraudReports]
-  );
-
-  const reportStatus = useMemo(
-    () =>
-      myReports.reduce(
-        (accumulator, item) => {
-          const safeStatus = item.status || "draft";
-          if (accumulator[safeStatus] === undefined) {
-            return accumulator;
-          }
-
-          return {
-            ...accumulator,
-            [safeStatus]: accumulator[safeStatus] + 1,
-          };
-        },
-        { draft: 0, review: 0, published: 0 }
-      ),
-    [myReports]
-  );
-
-  const locationHotspots = useMemo(() => {
-    const locationMap = {};
-
-    incidents.forEach((item) => {
-      const safeLocation = normalizeLocation(item.location);
-      locationMap[safeLocation] = (locationMap[safeLocation] || 0) + 1;
-    });
-
-    fraudReports.forEach((item) => {
-      const safeLocation = normalizeLocation(item.location);
-      locationMap[safeLocation] = (locationMap[safeLocation] || 0) + 1;
-    });
-
-    return Object.entries(locationMap)
-      .map(([location, count]) => ({ location, count }))
-      .sort((first, second) => second.count - first.count)
-      .slice(0, 6);
-  }, [incidents, fraudReports]);
-
-  const totalInputs = incidents.length + fraudReports.length;
-  const incidentTotal = incidents.length;
-  const fraudTotal = fraudReports.length;
-  const hotspotMax = locationHotspots.length
-    ? Math.max(...locationHotspots.map((item) => item.count))
-    : 0;
-
-  const incidentBars = [
-    { key: "high", label: "High", value: incidentSeverity.high },
-    { key: "medium", label: "Medium", value: incidentSeverity.medium },
-    { key: "low", label: "Low", value: incidentSeverity.low },
-  ];
-
-  const fraudBars = [
-    { key: "submitted", label: "Submitted", value: fraudWorkflow.submitted },
-    { key: "under-review", label: "Under Review", value: fraudWorkflow["under-review"] },
-    { key: "verified", label: "Verified", value: fraudWorkflow.verified },
-    { key: "rejected", label: "Rejected", value: fraudWorkflow.rejected },
-  ];
-
-  const recentIncidents = useMemo(
-    () =>
-      [...incidents]
-        .sort(
-          (first, second) =>
-            new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
-        )
-        .slice(0, 5),
-    [incidents]
-  );
-
-  const recentFraudReports = useMemo(
-    () =>
-      [...fraudReports]
-        .sort(
-          (first, second) =>
-            new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
-        )
-        .slice(0, 5),
-    [fraudReports]
-  );
-
-  const filteredReports = useMemo(() => {
-    const safeSearch = search.trim().toLowerCase();
-
-    return [...myReports]
-      .filter((item) => {
-        if (statusFilter !== "all" && item.status !== statusFilter) {
-          return false;
-        }
-
-        if (!safeSearch) {
-          return true;
-        }
-
-        const searchable = `${item.title} ${item.summary} ${item.recommendation}`.toLowerCase();
-        return searchable.includes(safeSearch);
-      })
-      .sort(
-        (first, second) =>
-          new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
-      );
-  }, [myReports, search, statusFilter]);
-
-  const sections = [
-    { key: "overview", label: "Overview" },
-    { key: "reports", label: "My Reports", count: myReports.length },
-    { key: "compose", label: form.id ? "Edit Report" : "New Report" },
-    { key: "inputs", label: "Data Inputs", count: incidents.length + fraudReports.length },
-  ];
-
-  const resetForm = () => {
-    setForm(initialForm);
+  const resetReportForm = () => {
+    setReportForm(reportInitialForm);
   };
 
-  const startEdit = (report) => {
-    setForm({
+  const handleReportSubmit = (event) => {
+    event.preventDefault();
+
+    const payload = {
+      title: reportForm.title.trim(),
+      summary: reportForm.summary.trim(),
+      recommendation: reportForm.recommendation.trim(),
+      status: reportForm.status,
+    };
+
+    if (!payload.title || !payload.summary || !payload.recommendation || !payload.status) {
+      setReportMessage("All report fields are required.");
+      return;
+    }
+
+    if (reportForm.id) {
+      const result = updateAnalystReport(reportForm.id, payload);
+      setReportMessage(result.message);
+      if (result.success) {
+        resetReportForm();
+      }
+      return;
+    }
+
+    const result = createAnalystReport(payload);
+    setReportMessage(result.message);
+    if (result.success) {
+      resetReportForm();
+    }
+  };
+
+  const beginEditReport = (report) => {
+    setReportForm({
       id: report.id,
       title: report.title,
       summary: report.summary,
       recommendation: report.recommendation,
       status: report.status,
     });
-    setActiveSection("compose");
   };
 
-  const updateReportStatus = (report, status) => {
-    const result = updateAnalystReport(report.id, {
-      title: report.title,
-      summary: report.summary,
-      recommendation: report.recommendation,
-      status,
-    });
-
-    setMessage(result.message);
-  };
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-
-    const payload = {
-      title: form.title.trim(),
-      summary: form.summary.trim(),
-      recommendation: form.recommendation.trim(),
-      status: form.status,
-    };
-
-    if (!payload.title || !payload.summary || !payload.recommendation) {
-      setMessage("Title, summary, and recommendation are required.");
-      return;
-    }
-
-    if (form.id) {
-      const result = updateAnalystReport(form.id, {
-        ...payload,
-      });
-      setMessage(result.message);
-      if (result.success) {
-        resetForm();
-        setActiveSection("reports");
-      }
-      return;
-    }
-
-    const result = createAnalystReport(payload);
-    setMessage(result.message);
-    if (result.success) {
-      resetForm();
-      setActiveSection("reports");
-    }
-  };
+  const navItems = [
+    { key: "dashboard", label: "Dashboard", icon: "📊" },
+    { key: "reports", label: "Reports", icon: "📁" },
+    { key: "constituencies", label: "Constituencies", icon: "🗺️" },
+    { key: "candidates", label: "Candidates", icon: "👤" },
+    {
+      key: "logout",
+      label: "Logout",
+      icon: "↩️",
+      action: () => {
+        logout();
+        navigate("/");
+      },
+    },
+  ];
 
   return (
-    <div className="dashboard-page">
-      <Navbar title="Analyst Dashboard" />
+    <div className="analyst-shell">
+      <AnalystSidebar navItems={navItems} activeItem={activeSection} onSelect={setActiveSection} />
 
-      <div className="dashboard-layout">
-        <Sidebar
-          title="Analyst Menu"
-          items={sections}
-          activeItem={activeSection}
-          onChange={setActiveSection}
+      <div className="analyst-shell-content">
+        <AnalystTopbar
+          analystName={currentUser?.name || "Election Analyst"}
+          now={now}
+          notifications={notifications}
         />
 
-        <main className="dashboard-main">
-          {activeSection === "overview" ? (
+        <main className="analyst-main-grid">
+          {activeSection === "dashboard" ? (
             <>
-              <section className="panel analyst-overview-panel">
-                <div className="analyst-overview-head">
-                  <div>
-                    <h3>Operational Intelligence</h3>
-                    <p>
-                      Live analyst workspace based on observer incidents, fraud complaints, and
-                      report production.
-                    </p>
-                  </div>
-                  <div className="analyst-live-chip">
-                    <span>Total Inputs</span>
-                    <strong>{totalInputs}</strong>
-                  </div>
-                </div>
-
-                <div className="analyst-kpi-grid">
-                  <article className="analyst-kpi-card">
-                    <span>My Reports</span>
-                    <strong>{myReports.length}</strong>
-                  </article>
-                  <article className="analyst-kpi-card">
-                    <span>Published Reports</span>
-                    <strong>{reportStatus.published}</strong>
-                  </article>
-                  <article className="analyst-kpi-card">
-                    <span>Open Risk Signals</span>
-                    <strong>{fraudWorkflow.submitted + fraudWorkflow["under-review"]}</strong>
-                  </article>
-                </div>
+              <section className="analyst-summary-grid">
+                {summaryCards.map((card) => (
+                  <SummaryCard
+                    key={card.title}
+                    icon={card.icon}
+                    title={card.title}
+                    value={card.value}
+                    gradient={card.gradient}
+                  />
+                ))}
               </section>
 
-              <section className="analyst-chart-grid">
-                <article className="panel analyst-chart-card">
-                  <h3>Incident Severity Distribution</h3>
-                  <p>Bar graph of observer incident intensity.</p>
-
-                  <div className="result-bar-list">
-                    {incidentBars.map((item) => (
-                      <div key={item.key} className="result-bar-row">
-                        <div className="result-bar-head">
-                          <strong>{item.label}</strong>
-                          <span>{item.value}</span>
-                        </div>
-                        <div className="result-bar-track">
-                          <div
-                            className="result-bar-fill"
-                            style={{ "--bar-width": `${buildPercent(item.value, incidentTotal)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-
-                <article className="panel analyst-chart-card">
-                  <h3>Fraud Workflow Health</h3>
-                  <p>Pipeline view from submission to verification.</p>
-
-                  <div className="result-bar-list">
-                    {fraudBars.map((item) => (
-                      <div key={item.key} className="result-bar-row">
-                        <div className="result-bar-head">
-                          <strong>{item.label}</strong>
-                          <span>{item.value}</span>
-                        </div>
-                        <div className="result-bar-track">
-                          <div
-                            className="result-bar-fill alt"
-                            style={{ "--bar-width": `${buildPercent(item.value, fraudTotal)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </article>
+              <section className="analyst-charts-grid">
+                <VotesPerCandidateChart data={electionData.votesPerCandidate} />
+                <ParticipationPieChart data={electionData.voterParticipation} />
+                <VotingTrendLineChart data={electionData.votingTrend} />
+                <RegionResultsChart data={electionData.regionResults} />
               </section>
 
-              <section className="panel analyst-live-panel">
-                <h3>Risk Hotspots by Location</h3>
-                <p>Combined count of incidents and fraud reports per location.</p>
+              <section className="analyst-table-card">
+                <div className="analyst-table-header">
+                  <h3>Recent Activity</h3>
+                  <p>Latest voter verification events across regions.</p>
+                </div>
 
-                <div className="result-bar-list">
-                  {locationHotspots.length ? (
-                    locationHotspots.map((item) => (
-                      <div key={item.location} className="result-bar-row">
-                        <div className="result-bar-head">
-                          <strong>{item.location}</strong>
-                          <span>{item.count}</span>
-                        </div>
-                        <div className="result-bar-track">
-                          <div
-                            className="result-bar-fill"
-                            style={{ "--bar-width": `${buildPercent(item.count, hotspotMax)}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="muted">No location data available yet.</p>
-                  )}
+                <div className="analyst-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Voter ID</th>
+                        <th>Region</th>
+                        <th>Time</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {electionData.recentActivity.map((item) => (
+                        <tr key={`${item.voterId}-${item.time}`}>
+                          <td>{item.voterId}</td>
+                          <td>{item.region}</td>
+                          <td>{item.time}</td>
+                          <td>
+                            <span
+                              className={`activity-status ${
+                                item.status === "Verified" ? "verified" : "pending"
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </>
           ) : null}
 
           {activeSection === "reports" ? (
-            <section className="panel">
-              <h3>My analysis reports</h3>
-              <p>Review, filter, and advance reports through analyst workflow.</p>
-              {message ? <p className="muted">{message}</p> : null}
-
-              <div className="analyst-toolbar">
-                <div className="analyst-toolbar-group">
-                  <input
-                    type="search"
-                    placeholder="Search reports by title or content"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                  <select
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="draft">Draft</option>
-                    <option value="review">In Review</option>
-                    <option value="published">Published</option>
-                  </select>
-                </div>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => {
-                    resetForm();
-                    setActiveSection("compose");
-                  }}
-                >
-                  New Report
-                </button>
+            <section className="analyst-table-card analyst-stack-card">
+              <div className="analyst-table-header">
+                <h3>Analyst Reports</h3>
+                <p>Create, edit, and manage your analytical reports.</p>
               </div>
 
-              <div className="table-wrap">
+              <form className="analyst-report-form" onSubmit={handleReportSubmit}>
+                <input
+                  type="text"
+                  placeholder="Report title"
+                  value={reportForm.title}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
+                />
+                <textarea
+                  rows={3}
+                  placeholder="Summary"
+                  value={reportForm.summary}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({ ...prev, summary: event.target.value }))
+                  }
+                />
+                <textarea
+                  rows={3}
+                  placeholder="Recommendation"
+                  value={reportForm.recommendation}
+                  onChange={(event) =>
+                    setReportForm((prev) => ({ ...prev, recommendation: event.target.value }))
+                  }
+                />
+                <div className="analyst-report-actions">
+                  <select
+                    value={reportForm.status}
+                    onChange={(event) =>
+                      setReportForm((prev) => ({ ...prev, status: event.target.value }))
+                    }
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="review">Review</option>
+                    <option value="published">Published</option>
+                  </select>
+                  <button className="btn btn-primary" type="submit">
+                    {reportForm.id ? "Update Report" : "Create Report"}
+                  </button>
+                  {reportForm.id ? (
+                    <button className="btn btn-outline" type="button" onClick={resetReportForm}>
+                      Cancel
+                    </button>
+                  ) : null}
+                </div>
+                {reportMessage ? <p className="analyst-inline-note">{reportMessage}</p> : null}
+              </form>
+
+              <div className="analyst-table-wrap">
                 <table>
                   <thead>
                     <tr>
                       <th>Title</th>
                       <th>Status</th>
                       <th>Updated</th>
-                      <th>Summary</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredReports.length ? (
-                      filteredReports.map((report) => (
-                        <tr key={report.id}>
-                          <td className="analyst-report-title">{report.title}</td>
+                    {myReports.length ? (
+                      myReports.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item.title}</td>
                           <td>
-                            <span className="pill">{report.status}</span>
+                            <span className="activity-status pending">{item.status}</span>
                           </td>
-                          <td>{new Date(report.createdAt || Date.now()).toLocaleString()}</td>
-                          <td>{report.summary}</td>
+                          <td>{new Date(item.updatedAt || item.createdAt || Date.now()).toLocaleString()}</td>
                           <td>
-                            <div className="table-actions">
+                            <div className="analyst-action-row">
                               <button
                                 className="btn btn-outline"
                                 type="button"
-                                onClick={() => startEdit(report)}
+                                onClick={() => beginEditReport(item)}
                               >
                                 Edit
                               </button>
-                              {report.status !== "published" ? (
-                                <button
-                                  className="btn btn-primary"
-                                  type="button"
-                                  onClick={() =>
-                                    updateReportStatus(report, reportFlow[report.status])
-                                  }
-                                >
-                                  Move to {reportFlow[report.status]}
-                                </button>
-                              ) : null}
                               <button
                                 className="btn btn-danger"
                                 type="button"
                                 onClick={() => {
-                                  const result = deleteAnalystReport(report.id);
-                                  setMessage(result.message);
+                                  const result = deleteAnalystReport(item.id);
+                                  setReportMessage(result.message);
+                                  if (reportForm.id === item.id) {
+                                    resetReportForm();
+                                  }
                                 }}
                               >
                                 Delete
@@ -477,9 +351,7 @@ function AnalystDashboard() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="muted">
-                          No reports match your current search and status filter.
-                        </td>
+                        <td colSpan={4}>No reports found for this analyst.</td>
                       </tr>
                     )}
                   </tbody>
@@ -488,110 +360,77 @@ function AnalystDashboard() {
             </section>
           ) : null}
 
-          {activeSection === "compose" ? (
-            <section className="panel">
-              <h3>{form.id ? "Update report" : "Create report"}</h3>
-              <p>Draft a professional analytical brief for election authorities.</p>
-              {message ? <p className="muted">{message}</p> : null}
+          {activeSection === "constituencies" ? (
+            <section className="analyst-table-card">
+              <div className="analyst-table-header">
+                <h3>Constituency Results</h3>
+                <p>Region-level vote count and share contribution.</p>
+              </div>
 
-              <form className="compact-form" onSubmit={handleSubmit}>
-                <input
-                  placeholder="Report title"
-                  required
-                  value={form.title}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, title: event.target.value }))
-                  }
-                />
-                <textarea
-                  placeholder="Summary"
-                  required
-                  rows={5}
-                  value={form.summary}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, summary: event.target.value }))
-                  }
-                />
-                <textarea
-                  placeholder="Recommendation"
-                  required
-                  rows={5}
-                  value={form.recommendation}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, recommendation: event.target.value }))
-                  }
-                />
-                <select
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, status: event.target.value }))
-                  }
-                >
-                  <option value="draft">Draft</option>
-                  <option value="review">In Review</option>
-                  <option value="published">Published</option>
-                </select>
-                <div className="form-row">
-                  <button className="btn btn-primary" type="submit">
-                    {form.id ? "Save Changes" : "Create Report"}
-                  </button>
-                  {form.id ? (
-                    <button
-                      className="btn btn-outline"
-                      type="button"
-                      onClick={() => {
-                        resetForm();
-                        setActiveSection("reports");
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  ) : null}
-                </div>
-              </form>
+              <div className="analyst-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Region</th>
+                      <th>Votes</th>
+                      <th>Share of Total Votes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {constituencyRows.map((item) => (
+                      <tr key={item.region}>
+                        <td>{item.region}</td>
+                        <td>{formatNumber(item.votes)}</td>
+                        <td>{item.share}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           ) : null}
 
-          {activeSection === "inputs" ? (
-            <section className="panel">
-              <h3>Data inputs</h3>
-              <p>Recent field records and citizen complaints supporting analyst decisions.</p>
+          {activeSection === "candidates" ? (
+            <section className="analyst-table-card analyst-stack-card">
+              <div className="analyst-table-header">
+                <h3>Candidate Performance</h3>
+                <p>Search and track candidate vote performance rankings.</p>
+              </div>
 
-              <div className="grid two-cols">
-                <article className="panel">
-                  <h3>Recent incidents ({incidents.length})</h3>
-                  <p className="muted">Observer-submitted incident records with severity markers.</p>
+              <div className="analyst-search-row">
+                <input
+                  type="search"
+                  placeholder="Search candidate name"
+                  value={candidateSearch}
+                  onChange={(event) => setCandidateSearch(event.target.value)}
+                />
+              </div>
 
-                  {recentIncidents.length ? (
-                    recentIncidents.map((item) => (
-                      <div className="list-item" key={item.id}>
-                        <strong>{item.title}</strong>
-                        <p>
-                          {item.location} · <span className="pill">{item.severity}</span>
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="muted">No incidents available yet.</p>
-                  )}
-                </article>
-                <article className="panel">
-                  <h3>Recent fraud reports ({fraudReports.length})</h3>
-                  <p className="muted">Citizen-submitted complaints and allegations by workflow state.</p>
-
-                  {recentFraudReports.length ? (
-                    recentFraudReports.map((item) => (
-                      <div className="list-item" key={item.id}>
-                        <strong>{item.title}</strong>
-                        <p>
-                          {item.location} · <span className="pill">{item.status}</span>
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="muted">No fraud reports available yet.</p>
-                  )}
-                </article>
+              <div className="analyst-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Candidate</th>
+                      <th>Votes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidateRows.length ? (
+                      candidateRows.map((item) => (
+                        <tr key={item.name}>
+                          <td>#{item.rank}</td>
+                          <td>{item.name}</td>
+                          <td>{formatNumber(item.votes)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3}>No candidate match found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
           ) : null}

@@ -15,6 +15,10 @@ const roles = [
     title: "Citizen",
     desc: "Track election updates, submit fraud reports, and stay engaged in a secure civic participation process.",
   },
+  {
+    title: "Data Analyst",
+    desc: "Analyze election data, generate decision-ready reports, and provide real-time insights on process quality.",
+  },
 ];
 
 const features = [

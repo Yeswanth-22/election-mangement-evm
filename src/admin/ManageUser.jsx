@@ -11,6 +11,8 @@ const initialForm = {
 function ManageUser({ users, onCreate, onUpdate, onDelete, currentUserId }) {
 	const [form, setForm] = useState(initialForm);
 	const [message, setMessage] = useState("");
+	const [search, setSearch] = useState("");
+	const [roleFilter, setRoleFilter] = useState("all");
 
 	const isEditing = useMemo(() => Boolean(form.id), [form.id]);
 
@@ -58,6 +60,23 @@ function ManageUser({ users, onCreate, onUpdate, onDelete, currentUserId }) {
 		const result = onDelete(userId);
 		setMessage(result.message);
 	};
+
+	const filteredUsers = useMemo(() => {
+		const safeSearch = search.trim().toLowerCase();
+
+		return users.filter((user) => {
+			if (roleFilter !== "all" && user.role !== roleFilter) {
+				return false;
+			}
+
+			if (!safeSearch) {
+				return true;
+			}
+
+			const searchable = `${user.name} ${user.email} ${user.role}`.toLowerCase();
+			return searchable.includes(safeSearch);
+		});
+	}, [users, search, roleFilter]);
 
 	return (
 		<section className="panel">
@@ -108,6 +127,28 @@ function ManageUser({ users, onCreate, onUpdate, onDelete, currentUserId }) {
 				{message ? <p className="muted">{message}</p> : null}
 			</form>
 
+			<div className="admin-toolbar">
+				<div className="admin-toolbar-group">
+					<input
+						type="search"
+						placeholder="Search by name, email, or role"
+						value={search}
+						onChange={(event) => setSearch(event.target.value)}
+					/>
+					<select
+						value={roleFilter}
+						onChange={(event) => setRoleFilter(event.target.value)}
+					>
+						<option value="all">All roles</option>
+						<option value="admin">Admin</option>
+						<option value="citizen">Citizen</option>
+						<option value="observer">Observer</option>
+						<option value="analyst">Analyst</option>
+					</select>
+				</div>
+				<p className="admin-toolbar-note">Showing {filteredUsers.length} users</p>
+			</div>
+
 			<div className="table-wrap">
 				<table>
 					<thead>
@@ -119,7 +160,8 @@ function ManageUser({ users, onCreate, onUpdate, onDelete, currentUserId }) {
 						</tr>
 					</thead>
 					<tbody>
-						{users.map((user) => (
+						{filteredUsers.length ? (
+							filteredUsers.map((user) => (
 							<tr key={user.id}>
 								<td>{user.name}</td>
 								<td>{user.email}</td>
@@ -142,7 +184,14 @@ function ManageUser({ users, onCreate, onUpdate, onDelete, currentUserId }) {
 									</div>
 								</td>
 							</tr>
-						))}
+						))
+						) : (
+							<tr>
+								<td colSpan={4} className="muted">
+									No users match your filters.
+								</td>
+							</tr>
+						)}
 					</tbody>
 				</table>
 			</div>

@@ -281,13 +281,22 @@ export const AuthProvider = ({ children }) => {
   };
 
   const createFraudReport = (payload) => {
+    const safeTitle = payload.title?.trim();
+    const safeCategory = payload.category;
+    const safeDescription = payload.description?.trim();
+    const safeLocation = payload.location?.trim();
+
+    if (!safeTitle || !safeCategory || !safeDescription || !safeLocation) {
+      return { success: false, message: "All fraud report fields are required." };
+    }
+
     const item = {
       id: makeId(),
-      title: payload.title,
-      category: payload.category,
+      title: safeTitle,
+      category: safeCategory,
       status: "submitted",
-      description: payload.description,
-      location: payload.location,
+      description: safeDescription,
+      location: safeLocation,
       createdBy: currentUser?.name || "Unknown",
       createdById: currentUser?.id,
       createdAt: new Date().toISOString(),
@@ -310,15 +319,27 @@ export const AuthProvider = ({ children }) => {
   };
 
   const createAnalystReport = (payload) => {
+    const safeTitle = payload.title?.trim();
+    const safeSummary = payload.summary?.trim();
+    const safeRecommendation = payload.recommendation?.trim();
+    const safeStatus = payload.status;
+
+    if (!safeTitle || !safeSummary || !safeRecommendation || !safeStatus) {
+      return { success: false, message: "All analyst report fields are required." };
+    }
+
+    const now = new Date().toISOString();
+
     const item = {
       id: makeId(),
-      title: payload.title,
-      summary: payload.summary,
-      recommendation: payload.recommendation,
-      status: payload.status,
+      title: safeTitle,
+      summary: safeSummary,
+      recommendation: safeRecommendation,
+      status: safeStatus,
       createdBy: currentUser?.name || "Unknown",
       createdById: currentUser?.id,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     setAnalystReports((prev) => [item, ...prev]);
@@ -326,8 +347,29 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateAnalystReport = (reportId, updates) => {
+    const safeTitle = updates.title?.trim();
+    const safeSummary = updates.summary?.trim();
+    const safeRecommendation = updates.recommendation?.trim();
+    const safeStatus = updates.status;
+
+    if (!safeTitle || !safeSummary || !safeRecommendation || !safeStatus) {
+      return { success: false, message: "All analyst report fields are required." };
+    }
+
     setAnalystReports((prev) =>
-      prev.map((item) => (item.id === reportId ? { ...item, ...updates } : item))
+      prev.map((item) =>
+        item.id === reportId
+          ? {
+              ...item,
+              ...updates,
+              title: safeTitle,
+              summary: safeSummary,
+              recommendation: safeRecommendation,
+              status: safeStatus,
+              updatedAt: new Date().toISOString(),
+            }
+          : item
+      )
     );
     return { success: true, message: "Analysis report updated." };
   };

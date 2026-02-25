@@ -2,6 +2,8 @@ import { useState } from "react";
 
 function FraudReports({ reports, onUpdate, onDelete }) {
 	const [message, setMessage] = useState("");
+	const [search, setSearch] = useState("");
+	const [statusFilter, setStatusFilter] = useState("all");
 
 	const handleStatusChange = (reportId, status) => {
 		const result = onUpdate(reportId, { status });
@@ -13,11 +15,52 @@ function FraudReports({ reports, onUpdate, onDelete }) {
 		setMessage(result.message);
 	};
 
+	const filteredReports = reports
+		.filter((report) => {
+			if (statusFilter !== "all" && report.status !== statusFilter) {
+				return false;
+			}
+
+			const safeSearch = search.trim().toLowerCase();
+			if (!safeSearch) {
+				return true;
+			}
+
+			const searchable = `${report.title} ${report.location} ${report.category} ${report.createdBy}`.toLowerCase();
+			return searchable.includes(safeSearch);
+		})
+		.sort(
+			(first, second) =>
+				new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
+		);
+
 	return (
 		<section className="panel">
 			<h3>Fraud report desk</h3>
 			<p>Review citizen reports, update workflow status, and remove invalid entries.</p>
 			{message ? <p className="muted">{message}</p> : null}
+
+			<div className="admin-toolbar">
+				<div className="admin-toolbar-group">
+					<input
+						type="search"
+						placeholder="Search title, location, category, or reporter"
+						value={search}
+						onChange={(event) => setSearch(event.target.value)}
+					/>
+					<select
+						value={statusFilter}
+						onChange={(event) => setStatusFilter(event.target.value)}
+					>
+						<option value="all">All statuses</option>
+						<option value="submitted">Submitted</option>
+						<option value="under-review">Under Review</option>
+						<option value="verified">Verified</option>
+						<option value="rejected">Rejected</option>
+					</select>
+				</div>
+				<p className="admin-toolbar-note">Showing {filteredReports.length} reports</p>
+			</div>
 
 			<div className="table-wrap">
 				<table>
@@ -32,36 +75,44 @@ function FraudReports({ reports, onUpdate, onDelete }) {
 						</tr>
 					</thead>
 					<tbody>
-						{reports.map((report) => (
-							<tr key={report.id}>
-								<td>{report.title}</td>
-								<td>{report.location}</td>
-								<td>{report.category}</td>
-								<td>
-									<select
-										value={report.status}
-										onChange={(event) =>
-											handleStatusChange(report.id, event.target.value)
-										}
-									>
-										<option value="submitted">Submitted</option>
-										<option value="under-review">Under Review</option>
-										<option value="verified">Verified</option>
-										<option value="rejected">Rejected</option>
-									</select>
-								</td>
-								<td>{report.createdBy}</td>
-								<td>
-									<button
-										className="btn btn-danger"
-										type="button"
-										onClick={() => handleDelete(report.id)}
-									>
-										Delete
-									</button>
+						{filteredReports.length ? (
+							filteredReports.map((report) => (
+								<tr key={report.id}>
+									<td>{report.title}</td>
+									<td>{report.location}</td>
+									<td>{report.category}</td>
+									<td>
+										<select
+											value={report.status}
+											onChange={(event) =>
+												handleStatusChange(report.id, event.target.value)
+											}
+										>
+											<option value="submitted">Submitted</option>
+											<option value="under-review">Under Review</option>
+											<option value="verified">Verified</option>
+											<option value="rejected">Rejected</option>
+										</select>
+									</td>
+									<td>{report.createdBy}</td>
+									<td>
+										<button
+											className="btn btn-danger"
+											type="button"
+											onClick={() => handleDelete(report.id)}
+										>
+											Delete
+										</button>
+									</td>
+								</tr>
+							))
+						) : (
+							<tr>
+								<td colSpan={6} className="muted">
+									No fraud reports match your filters.
 								</td>
 							</tr>
-						))}
+						)}
 					</tbody>
 				</table>
 			</div>

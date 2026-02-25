@@ -148,6 +148,37 @@ function AdminDashboard() {
 
   const hotspotMax = hotspots.length ? Math.max(...hotspots.map((item) => item.count)) : 0;
 
+  const adminHighlights = [
+    {
+      key: "users",
+      label: "Total Users",
+      value: dashboardStats.users,
+      note: "Active accounts",
+      icon: "👥",
+    },
+    {
+      key: "incidents",
+      label: "Open Incidents",
+      value: dashboardStats.incidents,
+      note: "Observer logs",
+      icon: "🚨",
+    },
+    {
+      key: "fraud",
+      label: "Pending Fraud",
+      value: fraudByStatus.submitted + fraudByStatus["under-review"],
+      note: "Needs review",
+      icon: "🛡️",
+    },
+    {
+      key: "analysts",
+      label: "Analyst Reports",
+      value: analystReports.length,
+      note: "Intelligence briefs",
+      icon: "📊",
+    },
+  ];
+
   const sections = [
     { key: "overview", label: "Overview" },
     { key: "users", label: "Users", count: users.length },
@@ -179,6 +210,21 @@ function AdminDashboard() {
                     <span>Pending Fraud Cases</span>
                     <strong>{fraudByStatus.submitted + fraudByStatus["under-review"]}</strong>
                   </div>
+                </div>
+
+                <div className="admin-metric-grid">
+                  {adminHighlights.map((item) => (
+                    <article className="admin-metric-card" key={item.key}>
+                      <div className="admin-metric-icon" aria-hidden="true">
+                        {item.icon}
+                      </div>
+                      <div>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                        <small>{item.note}</small>
+                      </div>
+                    </article>
+                  ))}
                 </div>
 
                 <div className="analyst-kpi-grid">

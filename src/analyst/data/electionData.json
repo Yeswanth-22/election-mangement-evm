@@ -1,0 +1,47 @@
+{
+  "summary": {
+    "totalRegisteredVoters": 128450,
+    "totalVotesCast": 104982,
+    "participationPercentage": 81.73,
+    "leadingCandidate": "Aditi Sharma"
+  },
+  "votesPerCandidate": [
+    { "name": "Aditi Sharma", "votes": 32640 },
+    { "name": "Rohit Verma", "votes": 28935 },
+    { "name": "Neha Iyer", "votes": 24112 },
+    { "name": "Sanjay Rao", "votes": 19305 }
+  ],
+  "voterParticipation": [
+    { "name": "Voted", "value": 104982 },
+    { "name": "Not Voted", "value": 23468 }
+  ],
+  "votingTrend": [
+    { "time": "08:00", "votes": 4520 },
+    { "time": "09:00", "votes": 11240 },
+    { "time": "10:00", "votes": 18420 },
+    { "time": "11:00", "votes": 23910 },
+    { "time": "12:00", "votes": 28610 },
+    { "time": "13:00", "votes": 33450 },
+    { "time": "14:00", "votes": 41230 },
+    { "time": "15:00", "votes": 58930 },
+    { "time": "16:00", "votes": 73100 },
+    { "time": "17:00", "votes": 89450 },
+    { "time": "18:00", "votes": 104982 }
+  ],
+  "regionResults": [
+    { "region": "North City", "votes": 18960 },
+    { "region": "South Ridge", "votes": 17130 },
+    { "region": "East Valley", "votes": 16240 },
+    { "region": "West Plains", "votes": 15850 },
+    { "region": "Central Ward", "votes": 17420 },
+    { "region": "River Belt", "votes": 19382 }
+  ],
+  "recentActivity": [
+    { "voterId": "VT-10021", "region": "North City", "time": "10:22 AM", "status": "Verified" },
+    { "voterId": "VT-10453", "region": "West Plains", "time": "10:31 AM", "status": "Verified" },
+    { "voterId": "VT-10984", "region": "Central Ward", "time": "10:36 AM", "status": "Pending" },
+    { "voterId": "VT-11230", "region": "River Belt", "time": "10:40 AM", "status": "Verified" },
+    { "voterId": "VT-11920", "region": "East Valley", "time": "10:46 AM", "status": "Pending" },
+    { "voterId": "VT-12451", "region": "South Ridge", "time": "10:53 AM", "status": "Verified" }
+  ]
+}

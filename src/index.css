@@ -392,6 +392,64 @@ th {
 	gap: 8px;
 }
 
+.pro-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 12px 0 14px;
+	flex-wrap: wrap;
+}
+
+.pro-toolbar-group {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+	flex: 1;
+	min-width: 280px;
+}
+
+.pro-toolbar-group input {
+	min-width: 260px;
+	max-width: 420px;
+}
+
+.pro-strong-cell {
+	font-weight: 700;
+	color: #153b7c;
+	min-width: 170px;
+}
+
+.analyst-toolbar {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin: 12px 0 14px;
+	flex-wrap: wrap;
+}
+
+.analyst-toolbar-group {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	flex-wrap: wrap;
+	flex: 1;
+	min-width: 280px;
+}
+
+.analyst-toolbar-group input {
+	min-width: 260px;
+	max-width: 420px;
+}
+
+.analyst-report-title {
+	font-weight: 700;
+	color: #173d80;
+	min-width: 180px;
+}
+
 .analyst-overview-panel {
 	background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
 }
@@ -600,6 +658,26 @@ th {
 
 	.analyst-live-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.analyst-toolbar-group {
+		width: 100%;
+	}
+
+	.analyst-toolbar-group input,
+	.analyst-toolbar-group select {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.pro-toolbar-group {
+		width: 100%;
+	}
+
+	.pro-toolbar-group input,
+	.pro-toolbar-group select {
+		flex: 1;
+		min-width: 0;
 	}
 }
 

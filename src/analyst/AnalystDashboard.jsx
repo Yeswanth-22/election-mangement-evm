@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { AuthContext } from "../context/AuthContext";
 import Navbar from "../components/Navbar";
 import Sidebar from "../components/Sidebar";
@@ -11,7 +11,28 @@ const initialForm = {
   status: "draft",
 };
 
-const formatNumber = (value) => new Intl.NumberFormat("en-IN").format(value);
+const reportFlow = {
+  draft: "review",
+  review: "published",
+  published: "published",
+};
+
+const buildPercent = (value, total) => {
+  if (!total) {
+    return 0;
+  }
+
+  return Math.round((value / total) * 100);
+};
+
+const normalizeLocation = (value) => {
+  if (!value || typeof value !== "string") {
+    return "Unknown";
+  }
+
+  const safeValue = value.trim();
+  return safeValue || "Unknown";
+};
 
 function AnalystDashboard() {
   const {
@@ -19,7 +40,6 @@ function AnalystDashboard() {
     incidents,
     fraudReports,
     analystReports,
-    electionResults,
     createAnalystReport,
     updateAnalystReport,
     deleteAnalystReport,
@@ -27,121 +47,221 @@ function AnalystDashboard() {
 
   const [activeSection, setActiveSection] = useState("overview");
   const [form, setForm] = useState(initialForm);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState("");
-  const [liveNow, setLiveNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setLiveNow(new Date());
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, []);
 
   const myReports = useMemo(
     () => analystReports.filter((report) => report.createdById === currentUser?.id),
     [analystReports, currentUser?.id]
   );
 
-  const riskCases = useMemo(
-    () => incidents.filter((item) => item.severity === "high").length,
+  const incidentSeverity = useMemo(
+    () =>
+      incidents.reduce(
+        (accumulator, item) => {
+          const safeSeverity = item.severity || "medium";
+          if (accumulator[safeSeverity] === undefined) {
+            return accumulator;
+          }
+
+          return {
+            ...accumulator,
+            [safeSeverity]: accumulator[safeSeverity] + 1,
+          };
+        },
+        { low: 0, medium: 0, high: 0 }
+      ),
     [incidents]
   );
 
-  const voteSummary = useMemo(() => {
-    const totalVotes = electionResults.reduce(
-      (sum, item) => sum + Number(item.totalVotes || 0),
-      0
-    );
-    const countedVotes = electionResults.reduce(
-      (sum, item) => sum + Number(item.votes || 0),
-      0
-    );
-    const countingProgress = totalVotes ? (countedVotes / totalVotes) * 100 : 0;
-    const finalizedBooths = electionResults.filter(
-      (item) => item.status === "final"
-    ).length;
-    const activeBooths = Math.max(electionResults.length - finalizedBooths, 0);
-    const leadingBooth = [...electionResults].sort(
-      (a, b) => Number(b.votes || 0) - Number(a.votes || 0)
-    )[0];
-
-    return {
-      totalVotes,
-      countedVotes,
-      countingProgress,
-      finalizedBooths,
-      activeBooths,
-      leadingBooth,
-    };
-  }, [electionResults]);
-
-  const constituencyBars = useMemo(() => {
-    const grouped = electionResults.reduce((acc, item) => {
-      const key = item.constituency || "Unknown";
-      const current = acc[key] || { label: key, votes: 0, totalVotes: 0, booths: 0 };
-
-      current.votes += Number(item.votes || 0);
-      current.totalVotes += Number(item.totalVotes || 0);
-      current.booths += 1;
-
-      acc[key] = current;
-      return acc;
-    }, {});
-
-    return Object.values(grouped)
-      .map((item) => ({
-        ...item,
-        percentage: item.totalVotes ? (item.votes / item.totalVotes) * 100 : 0,
-      }))
-      .sort((a, b) => b.percentage - a.percentage)
-      .slice(0, 8);
-  }, [electionResults]);
-
-  const boothBars = useMemo(
+  const fraudWorkflow = useMemo(
     () =>
-      [...electionResults]
-        .map((item) => ({
-          ...item,
-          percentage: item.totalVotes
-            ? (Number(item.votes || 0) / Number(item.totalVotes || 0)) * 100
-            : 0,
-        }))
-        .sort((a, b) => b.percentage - a.percentage)
-        .slice(0, 8),
-    [electionResults]
+      fraudReports.reduce(
+        (accumulator, item) => {
+          const safeStatus = item.status || "submitted";
+          if (accumulator[safeStatus] === undefined) {
+            return accumulator;
+          }
+
+          return {
+            ...accumulator,
+            [safeStatus]: accumulator[safeStatus] + 1,
+          };
+        },
+        { submitted: 0, "under-review": 0, verified: 0, rejected: 0 }
+      ),
+    [fraudReports]
   );
+
+  const reportStatus = useMemo(
+    () =>
+      myReports.reduce(
+        (accumulator, item) => {
+          const safeStatus = item.status || "draft";
+          if (accumulator[safeStatus] === undefined) {
+            return accumulator;
+          }
+
+          return {
+            ...accumulator,
+            [safeStatus]: accumulator[safeStatus] + 1,
+          };
+        },
+        { draft: 0, review: 0, published: 0 }
+      ),
+    [myReports]
+  );
+
+  const locationHotspots = useMemo(() => {
+    const locationMap = {};
+
+    incidents.forEach((item) => {
+      const safeLocation = normalizeLocation(item.location);
+      locationMap[safeLocation] = (locationMap[safeLocation] || 0) + 1;
+    });
+
+    fraudReports.forEach((item) => {
+      const safeLocation = normalizeLocation(item.location);
+      locationMap[safeLocation] = (locationMap[safeLocation] || 0) + 1;
+    });
+
+    return Object.entries(locationMap)
+      .map(([location, count]) => ({ location, count }))
+      .sort((first, second) => second.count - first.count)
+      .slice(0, 6);
+  }, [incidents, fraudReports]);
+
+  const totalInputs = incidents.length + fraudReports.length;
+  const incidentTotal = incidents.length;
+  const fraudTotal = fraudReports.length;
+  const hotspotMax = locationHotspots.length
+    ? Math.max(...locationHotspots.map((item) => item.count))
+    : 0;
+
+  const incidentBars = [
+    { key: "high", label: "High", value: incidentSeverity.high },
+    { key: "medium", label: "Medium", value: incidentSeverity.medium },
+    { key: "low", label: "Low", value: incidentSeverity.low },
+  ];
+
+  const fraudBars = [
+    { key: "submitted", label: "Submitted", value: fraudWorkflow.submitted },
+    { key: "under-review", label: "Under Review", value: fraudWorkflow["under-review"] },
+    { key: "verified", label: "Verified", value: fraudWorkflow.verified },
+    { key: "rejected", label: "Rejected", value: fraudWorkflow.rejected },
+  ];
+
+  const recentIncidents = useMemo(
+    () =>
+      [...incidents]
+        .sort(
+          (first, second) =>
+            new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
+        )
+        .slice(0, 5),
+    [incidents]
+  );
+
+  const recentFraudReports = useMemo(
+    () =>
+      [...fraudReports]
+        .sort(
+          (first, second) =>
+            new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
+        )
+        .slice(0, 5),
+    [fraudReports]
+  );
+
+  const filteredReports = useMemo(() => {
+    const safeSearch = search.trim().toLowerCase();
+
+    return [...myReports]
+      .filter((item) => {
+        if (statusFilter !== "all" && item.status !== statusFilter) {
+          return false;
+        }
+
+        if (!safeSearch) {
+          return true;
+        }
+
+        const searchable = `${item.title} ${item.summary} ${item.recommendation}`.toLowerCase();
+        return searchable.includes(safeSearch);
+      })
+      .sort(
+        (first, second) =>
+          new Date(second.createdAt || 0).getTime() - new Date(first.createdAt || 0).getTime()
+      );
+  }, [myReports, search, statusFilter]);
 
   const sections = [
     { key: "overview", label: "Overview" },
     { key: "reports", label: "My Reports", count: myReports.length },
-    { key: "create", label: form.id ? "Edit Report" : "Create Report" },
-    { key: "incidents", label: "Incident Data", count: incidents.length },
-    { key: "fraud", label: "Fraud Data", count: fraudReports.length },
+    { key: "compose", label: form.id ? "Edit Report" : "New Report" },
+    { key: "inputs", label: "Data Inputs", count: incidents.length + fraudReports.length },
   ];
 
-  const resetForm = () => setForm(initialForm);
+  const resetForm = () => {
+    setForm(initialForm);
+  };
+
+  const startEdit = (report) => {
+    setForm({
+      id: report.id,
+      title: report.title,
+      summary: report.summary,
+      recommendation: report.recommendation,
+      status: report.status,
+    });
+    setActiveSection("compose");
+  };
+
+  const updateReportStatus = (report, status) => {
+    const result = updateAnalystReport(report.id, {
+      title: report.title,
+      summary: report.summary,
+      recommendation: report.recommendation,
+      status,
+    });
+
+    setMessage(result.message);
+  };
 
   const handleSubmit = (event) => {
     event.preventDefault();
 
-    if (form.id) {
-      const result = updateAnalystReport(form.id, {
-        title: form.title,
-        summary: form.summary,
-        recommendation: form.recommendation,
-        status: form.status,
-      });
-      setMessage(result.message);
-      resetForm();
-      setActiveSection("reports");
+    const payload = {
+      title: form.title.trim(),
+      summary: form.summary.trim(),
+      recommendation: form.recommendation.trim(),
+      status: form.status,
+    };
+
+    if (!payload.title || !payload.summary || !payload.recommendation) {
+      setMessage("Title, summary, and recommendation are required.");
       return;
     }
 
-    const result = createAnalystReport(form);
+    if (form.id) {
+      const result = updateAnalystReport(form.id, {
+        ...payload,
+      });
+      setMessage(result.message);
+      if (result.success) {
+        resetForm();
+        setActiveSection("reports");
+      }
+      return;
+    }
+
+    const result = createAnalystReport(payload);
     setMessage(result.message);
-    resetForm();
-    setActiveSection("reports");
+    if (result.success) {
+      resetForm();
+      setActiveSection("reports");
+    }
   };
 
   return (
@@ -162,168 +282,143 @@ function AnalystDashboard() {
               <section className="panel analyst-overview-panel">
                 <div className="analyst-overview-head">
                   <div>
-                    <h3>Election Results Monitoring Center</h3>
+                    <h3>Operational Intelligence</h3>
                     <p>
-                      Live intelligence board for constituency-level counting progress,
-                      voting trends, and operational risk tracking.
+                      Live analyst workspace based on observer incidents, fraud complaints, and
+                      report production.
                     </p>
                   </div>
                   <div className="analyst-live-chip">
-                    <span>Live Update</span>
-                    <strong>{liveNow.toLocaleTimeString()}</strong>
+                    <span>Total Inputs</span>
+                    <strong>{totalInputs}</strong>
                   </div>
                 </div>
 
                 <div className="analyst-kpi-grid">
                   <article className="analyst-kpi-card">
-                    <span>Booths Monitored</span>
-                    <strong>{electionResults.length}</strong>
+                    <span>My Reports</span>
+                    <strong>{myReports.length}</strong>
                   </article>
                   <article className="analyst-kpi-card">
-                    <span>Votes Counted</span>
-                    <strong>{formatNumber(voteSummary.countedVotes)}</strong>
+                    <span>Published Reports</span>
+                    <strong>{reportStatus.published}</strong>
                   </article>
                   <article className="analyst-kpi-card">
-                    <span>Counting Progress</span>
-                    <strong>{voteSummary.countingProgress.toFixed(1)}%</strong>
-                  </article>
-                  <article className="analyst-kpi-card">
-                    <span>Finalized Booths</span>
-                    <strong>{voteSummary.finalizedBooths}</strong>
-                  </article>
-                  <article className="analyst-kpi-card">
-                    <span>High-Risk Incidents</span>
-                    <strong>{riskCases}</strong>
-                  </article>
-                  <article className="analyst-kpi-card">
-                    <span>Fraud Reports</span>
-                    <strong>{fraudReports.length}</strong>
+                    <span>Open Risk Signals</span>
+                    <strong>{fraudWorkflow.submitted + fraudWorkflow["under-review"]}</strong>
                   </article>
                 </div>
               </section>
 
               <section className="analyst-chart-grid">
                 <article className="panel analyst-chart-card">
-                  <h3>Constituency Counting Progress</h3>
-                  <p>Live percentage of counted votes against expected votes.</p>
+                  <h3>Incident Severity Distribution</h3>
+                  <p>Bar graph of observer incident intensity.</p>
 
-                  {constituencyBars.length ? (
-                    <div className="result-bar-list">
-                      {constituencyBars.map((item) => (
-                        <div className="result-bar-row" key={item.label}>
-                          <div className="result-bar-head">
-                            <strong>{item.label}</strong>
-                            <span>
-                              {formatNumber(item.votes)} / {formatNumber(item.totalVotes)} (
-                              {item.percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <div className="result-bar-track">
-                            <div
-                              className="result-bar-fill"
-                              style={{ "--bar-width": `${item.percentage}%` }}
-                              title={`${item.label}: ${formatNumber(
-                                item.votes
-                              )} counted votes (${item.percentage.toFixed(2)}%)`}
-                            />
-                          </div>
+                  <div className="result-bar-list">
+                    {incidentBars.map((item) => (
+                      <div key={item.key} className="result-bar-row">
+                        <div className="result-bar-head">
+                          <strong>{item.label}</strong>
+                          <span>{item.value}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">No constituency vote data available yet.</p>
-                  )}
+                        <div className="result-bar-track">
+                          <div
+                            className="result-bar-fill"
+                            style={{ "--bar-width": `${buildPercent(item.value, incidentTotal)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </article>
 
                 <article className="panel analyst-chart-card">
-                  <h3>Booth Vote Share</h3>
-                  <p>Top polling booths by counted vote percentage.</p>
+                  <h3>Fraud Workflow Health</h3>
+                  <p>Pipeline view from submission to verification.</p>
 
-                  {boothBars.length ? (
-                    <div className="result-bar-list">
-                      {boothBars.map((item) => (
-                        <div className="result-bar-row" key={item.id}>
-                          <div className="result-bar-head">
-                            <strong>{item.boothName}</strong>
-                            <span>
-                              {formatNumber(item.votes)} / {formatNumber(item.totalVotes)} (
-                              {item.percentage.toFixed(1)}%)
-                            </span>
-                          </div>
-                          <div className="result-bar-track">
-                            <div
-                              className="result-bar-fill alt"
-                              style={{ "--bar-width": `${item.percentage}%` }}
-                              title={`${item.boothName}: ${formatNumber(
-                                item.votes
-                              )} votes (${item.percentage.toFixed(2)}%)`}
-                            />
-                          </div>
+                  <div className="result-bar-list">
+                    {fraudBars.map((item) => (
+                      <div key={item.key} className="result-bar-row">
+                        <div className="result-bar-head">
+                          <strong>{item.label}</strong>
+                          <span>{item.value}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">No booth-level vote data available yet.</p>
-                  )}
+                        <div className="result-bar-track">
+                          <div
+                            className="result-bar-fill alt"
+                            style={{ "--bar-width": `${buildPercent(item.value, fraudTotal)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </article>
               </section>
 
               <section className="panel analyst-live-panel">
-                <h3>Real-Time Vote Calculation</h3>
-                <div className="analyst-live-grid">
-                  <article>
-                    <span>Total Expected Votes</span>
-                    <strong>{formatNumber(voteSummary.totalVotes)}</strong>
-                  </article>
-                  <article>
-                    <span>Remaining Votes</span>
-                    <strong>
-                      {formatNumber(voteSummary.totalVotes - voteSummary.countedVotes)}
-                    </strong>
-                  </article>
-                  <article>
-                    <span>Active Counting Booths</span>
-                    <strong>{voteSummary.activeBooths}</strong>
-                  </article>
-                  <article>
-                    <span>Analyst Reports</span>
-                    <strong>{myReports.length}</strong>
-                  </article>
+                <h3>Risk Hotspots by Location</h3>
+                <p>Combined count of incidents and fraud reports per location.</p>
+
+                <div className="result-bar-list">
+                  {locationHotspots.length ? (
+                    locationHotspots.map((item) => (
+                      <div key={item.location} className="result-bar-row">
+                        <div className="result-bar-head">
+                          <strong>{item.location}</strong>
+                          <span>{item.count}</span>
+                        </div>
+                        <div className="result-bar-track">
+                          <div
+                            className="result-bar-fill"
+                            style={{ "--bar-width": `${buildPercent(item.count, hotspotMax)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">No location data available yet.</p>
+                  )}
                 </div>
-
-                {voteSummary.leadingBooth ? (
-                  <p className="muted">
-                    Current leading booth by counted votes: {voteSummary.leadingBooth.boothName}
-                    {" • "}
-                    {formatNumber(voteSummary.leadingBooth.votes)} votes counted.
-                  </p>
-                ) : (
-                  <p className="muted">Real-time calculations will appear once vote data is available.</p>
-                )}
-              </section>
-
-              <section className="panel">
-                <h3>Recent evidence feed</h3>
-                {incidents.length ? (
-                  incidents.slice(0, 5).map((incident) => (
-                    <div className="list-item" key={incident.id}>
-                      <strong>{incident.title}</strong>
-                      <p>
-                        {incident.location} • {incident.severity} • {incident.status}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="muted">No incident records are available yet.</p>
-                )}
               </section>
             </>
           ) : null}
 
           {activeSection === "reports" ? (
             <section className="panel">
-              <h3>My analytical reports</h3>
+              <h3>My analysis reports</h3>
+              <p>Review, filter, and advance reports through analyst workflow.</p>
               {message ? <p className="muted">{message}</p> : null}
+
+              <div className="analyst-toolbar">
+                <div className="analyst-toolbar-group">
+                  <input
+                    type="search"
+                    placeholder="Search reports by title or content"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                  >
+                    <option value="all">All statuses</option>
+                    <option value="draft">Draft</option>
+                    <option value="review">In Review</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => {
+                    resetForm();
+                    setActiveSection("compose");
+                  }}
+                >
+                  New Report
+                </button>
+              </div>
 
               <div className="table-wrap">
                 <table>
@@ -331,37 +426,41 @@ function AnalystDashboard() {
                     <tr>
                       <th>Title</th>
                       <th>Status</th>
-                      <th>Created At</th>
+                      <th>Updated</th>
+                      <th>Summary</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {myReports.length ? (
-                      myReports.map((report) => (
+                    {filteredReports.length ? (
+                      filteredReports.map((report) => (
                         <tr key={report.id}>
-                          <td>{report.title}</td>
+                          <td className="analyst-report-title">{report.title}</td>
                           <td>
                             <span className="pill">{report.status}</span>
                           </td>
-                          <td>{new Date(report.createdAt).toLocaleString()}</td>
+                          <td>{new Date(report.createdAt || Date.now()).toLocaleString()}</td>
+                          <td>{report.summary}</td>
                           <td>
                             <div className="table-actions">
                               <button
                                 className="btn btn-outline"
                                 type="button"
-                                onClick={() => {
-                                  setForm({
-                                    id: report.id,
-                                    title: report.title,
-                                    summary: report.summary,
-                                    recommendation: report.recommendation,
-                                    status: report.status,
-                                  });
-                                  setActiveSection("create");
-                                }}
+                                onClick={() => startEdit(report)}
                               >
                                 Edit
                               </button>
+                              {report.status !== "published" ? (
+                                <button
+                                  className="btn btn-primary"
+                                  type="button"
+                                  onClick={() =>
+                                    updateReportStatus(report, reportFlow[report.status])
+                                  }
+                                >
+                                  Move to {reportFlow[report.status]}
+                                </button>
+                              ) : null}
                               <button
                                 className="btn btn-danger"
                                 type="button"
@@ -378,8 +477,8 @@ function AnalystDashboard() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="muted">
-                          You have not created any analyst reports yet.
+                        <td colSpan={5} className="muted">
+                          No reports match your current search and status filter.
                         </td>
                       </tr>
                     )}
@@ -389,39 +488,47 @@ function AnalystDashboard() {
             </section>
           ) : null}
 
-          {activeSection === "create" ? (
+          {activeSection === "compose" ? (
             <section className="panel">
-              <h3>{form.id ? "Update analysis report" : "Create analysis report"}</h3>
+              <h3>{form.id ? "Update report" : "Create report"}</h3>
+              <p>Draft a professional analytical brief for election authorities.</p>
+              {message ? <p className="muted">{message}</p> : null}
 
               <form className="compact-form" onSubmit={handleSubmit}>
                 <input
                   placeholder="Report title"
                   required
                   value={form.title}
-                  onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, title: event.target.value }))
+                  }
                 />
                 <textarea
                   placeholder="Summary"
                   required
                   rows={5}
                   value={form.summary}
-                  onChange={(e) => setForm((prev) => ({ ...prev, summary: e.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, summary: event.target.value }))
+                  }
                 />
                 <textarea
                   placeholder="Recommendation"
                   required
-                  rows={4}
+                  rows={5}
                   value={form.recommendation}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, recommendation: e.target.value }))
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, recommendation: event.target.value }))
                   }
                 />
                 <select
                   value={form.status}
-                  onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, status: event.target.value }))
+                  }
                 >
                   <option value="draft">Draft</option>
-                  <option value="review">Review</option>
+                  <option value="review">In Review</option>
                   <option value="published">Published</option>
                 </select>
                 <div className="form-row">
@@ -445,82 +552,46 @@ function AnalystDashboard() {
             </section>
           ) : null}
 
-          {activeSection === "incidents" ? (
+          {activeSection === "inputs" ? (
             <section className="panel">
-              <h3>Incident dataset</h3>
-              <p>Analyze operational incidents collected by observers.</p>
+              <h3>Data inputs</h3>
+              <p>Recent field records and citizen complaints supporting analyst decisions.</p>
 
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Location</th>
-                      <th>Severity</th>
-                      <th>Status</th>
-                      <th>Observer</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {incidents.length ? (
-                      incidents.map((incident) => (
-                        <tr key={incident.id}>
-                          <td>{incident.title}</td>
-                          <td>{incident.location}</td>
-                          <td>{incident.severity}</td>
-                          <td>{incident.status}</td>
-                          <td>{incident.createdBy}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} className="muted">
-                          Incident data is not available yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : null}
+              <div className="grid two-cols">
+                <article className="panel">
+                  <h3>Recent incidents ({incidents.length})</h3>
+                  <p className="muted">Observer-submitted incident records with severity markers.</p>
 
-          {activeSection === "fraud" ? (
-            <section className="panel">
-              <h3>Fraud report dataset</h3>
-              <p>Use citizen-reported fraud cases for risk and pattern analysis.</p>
+                  {recentIncidents.length ? (
+                    recentIncidents.map((item) => (
+                      <div className="list-item" key={item.id}>
+                        <strong>{item.title}</strong>
+                        <p>
+                          {item.location} · <span className="pill">{item.severity}</span>
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">No incidents available yet.</p>
+                  )}
+                </article>
+                <article className="panel">
+                  <h3>Recent fraud reports ({fraudReports.length})</h3>
+                  <p className="muted">Citizen-submitted complaints and allegations by workflow state.</p>
 
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Category</th>
-                      <th>Location</th>
-                      <th>Status</th>
-                      <th>Reporter</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fraudReports.length ? (
-                      fraudReports.map((report) => (
-                        <tr key={report.id}>
-                          <td>{report.title}</td>
-                          <td>{report.category}</td>
-                          <td>{report.location}</td>
-                          <td>{report.status}</td>
-                          <td>{report.createdBy}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={5} className="muted">
-                          Fraud report data is not available yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                  {recentFraudReports.length ? (
+                    recentFraudReports.map((item) => (
+                      <div className="list-item" key={item.id}>
+                        <strong>{item.title}</strong>
+                        <p>
+                          {item.location} · <span className="pill">{item.status}</span>
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted">No fraud reports available yet.</p>
+                  )}
+                </article>
               </div>
             </section>
           ) : null}

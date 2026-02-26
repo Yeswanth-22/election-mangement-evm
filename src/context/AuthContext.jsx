@@ -51,7 +51,27 @@ const makeId = () => {
   return `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 };
 
-const seededUsers = [];
+const DEFAULT_ADMIN_USER = {
+  id: "seed-admin-1",
+  name: "System Admin",
+  email: "admin@ems.local",
+  password: "admin123",
+  role: "admin",
+};
+
+const ensureAdminUser = (list = []) => {
+  const hasAdmin = list.some(
+    (user) => user.email?.toLowerCase() === DEFAULT_ADMIN_USER.email
+  );
+
+  if (hasAdmin) {
+    return list;
+  }
+
+  return [DEFAULT_ADMIN_USER, ...list];
+};
+
+const seededUsers = [DEFAULT_ADMIN_USER];
 const seededIncidents = [];
 const seededFraudReports = [];
 const seededAnalystReports = [];
@@ -119,7 +139,9 @@ const readObject = (key, fallback = null) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [users, setUsers] = useState(() => readList(STORAGE_KEYS.users, seededUsers));
+  const [users, setUsers] = useState(() =>
+    ensureAdminUser(readList(STORAGE_KEYS.users, seededUsers))
+  );
   const [currentUser, setCurrentUser] = useState(() =>
     readObject(STORAGE_KEYS.currentUser, null)
   );
@@ -159,6 +181,13 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.electionResults, JSON.stringify(electionResults));
   }, [electionResults]);
+
+  useEffect(() => {
+    setUsers((prev) => {
+      const next = ensureAdminUser(prev);
+      return next.length === prev.length ? prev : next;
+    });
+  }, []);
 
   const register = (userData) => {
     const safeEmail = userData.email.trim().toLowerCase();

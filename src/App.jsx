@@ -14,7 +14,8 @@ import ObserverDashboard from "./observer/ObserverDashboard";
 import AnalystDashboard from "./analyst/AnalystDashboard";
 
 function AppRoutes() {
-  const { currentUser } = useContext(AuthContext);
+  const auth = useContext(AuthContext);
+  const currentUser = auth?.currentUser ?? null;
 
   const defaultPath = currentUser ? `/${currentUser.role}` : "/";
 

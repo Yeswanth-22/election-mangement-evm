@@ -1,6 +1,38 @@
 import { createContext, useEffect, useMemo, useState } from "react";
 
-export const AuthContext = createContext();
+export const AuthContext = createContext({
+  users: [],
+  currentUser: null,
+  incidents: [],
+  fraudReports: [],
+  analystReports: [],
+  electionResults: [],
+  dashboardStats: {
+    users: 0,
+    incidents: 0,
+    fraudReports: 0,
+    analystReports: 0,
+    electionResults: 0,
+  },
+  register: () => ({ success: false, message: "Auth provider unavailable." }),
+  login: () => ({ success: false, message: "Auth provider unavailable." }),
+  logout: () => {},
+  createUser: () => ({ success: false, message: "Auth provider unavailable." }),
+  updateUser: () => ({ success: false, message: "Auth provider unavailable." }),
+  deleteUser: () => ({ success: false, message: "Auth provider unavailable." }),
+  createIncident: () => ({ success: false, message: "Auth provider unavailable." }),
+  updateIncident: () => ({ success: false, message: "Auth provider unavailable." }),
+  deleteIncident: () => ({ success: false, message: "Auth provider unavailable." }),
+  createFraudReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  updateFraudReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  deleteFraudReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  createAnalystReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  updateAnalystReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  deleteAnalystReport: () => ({ success: false, message: "Auth provider unavailable." }),
+  createElectionResult: () => ({ success: false, message: "Auth provider unavailable." }),
+  updateElectionResult: () => ({ success: false, message: "Auth provider unavailable." }),
+  deleteElectionResult: () => ({ success: false, message: "Auth provider unavailable." }),
+});
 
 const STORAGE_KEYS = {
   users: "ems_users_v1",
